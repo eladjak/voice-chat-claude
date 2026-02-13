@@ -1,224 +1,259 @@
-# התקדמות הפרויקט - Voice Chat Claude
+# Voice Chat Claude - Progress
 
-> **עדכון אחרון:** 2026-02-13
-> **סטטוס כללי:** פעיל - היסטוריית שיחות (persist) הושלמה
-
----
-
-## מצב נוכחי
-
-### מה עובד (מוכן לשימוש):
-
-| רכיב | סטטוס | קובץ ראשי |
-|------|-------|-----------|
-| **Server (Hono)** | v | `server/index.ts` |
-| **STT - Whisper** | v | `server/lib/whisper.ts` |
-| **LLM - Claude** | v | `server/lib/claude.ts` |
-| **TTS - ElevenLabs** | v | `server/lib/elevenlabs.ts` |
-| **Frontend React** | v | `src/components/VoiceChat.tsx` |
-| **Push-to-Talk** | v | `src/hooks/useVoiceChat.ts` |
-| **VAD (Voice Activity Detection)** | v | `src/hooks/useVAD.ts` |
-| **שיחה רציפה** | v | `src/hooks/useContinuousVoiceChat.ts` |
-| **היסטוריית שיחות (persist)** | v | `server/lib/chat-store.ts` + `src/hooks/useChatHistory.ts` |
-| **TypeScript** | v | ללא שגיאות |
-
-### מה חסר (TODO):
-
-| פיצ'ר | עדיפות | מורכבות | הערות |
-|-------|--------|----------|--------|
-| Wake word ("היי קלוד") | בינונית | גבוהה | Porcupine / Picovoice |
-| Streaming TTS | בינונית | גבוהה | להפחית latency |
-| בחירת קול | נמוכה | נמוכה | UI לבחירת voice_id |
-| Interruption handling | בינונית | בינונית | עצירה חלקה של תשובה |
+> **Last updated:** 2026-02-13
+> **Status:** Active - Settings panel, wake word, and error handling improvements added
 
 ---
 
-## מבנה הפרויקט
+## Current State
+
+### Working Features:
+
+| Component | Status | Main File |
+|-----------|--------|-----------|
+| **Server (Hono)** | Done | `server/index.ts` |
+| **STT - Whisper** | Done | `server/lib/whisper.ts` |
+| **LLM - Claude** | Done | `server/lib/claude.ts` |
+| **TTS - ElevenLabs** | Done | `server/lib/elevenlabs.ts` |
+| **Frontend React** | Done | `src/components/VoiceChat.tsx` |
+| **Push-to-Talk** | Done | `src/hooks/useVoiceChat.ts` |
+| **VAD (Voice Activity Detection)** | Done | `src/hooks/useVAD.ts` |
+| **Continuous conversation** | Done | `src/hooks/useContinuousVoiceChat.ts` |
+| **Chat history (persist)** | Done | `server/lib/chat-store.ts` + `src/hooks/useChatHistory.ts` |
+| **Settings panel** | Done | `src/components/SettingsPanel.tsx` + `src/hooks/useSettings.ts` |
+| **Wake word detection** | Done | `src/hooks/useWakeWord.ts` |
+| **Env validation** | Done | `server/lib/env.ts` |
+| **TypeScript** | Done | No errors |
+
+### TODO:
+
+| Feature | Priority | Complexity | Notes |
+|---------|----------|------------|-------|
+| Streaming TTS | Medium | High | Reduce latency |
+| Interruption handling | Medium | Medium | Graceful stop of response |
+| Wake word integration in UI | Low | Low | Add toggle in settings, connect hook to continuous mode |
+| WebSocket streaming | Low | High | Replace SSE with WebSocket for bidirectional |
+
+---
+
+## Project Structure
 
 ```
 voice-chat-claude/
 ├── server/
-│   ├── index.ts           # Hono server, port 3001
+│   ├── index.ts              # Hono server, port 3001, env validation
 │   ├── lib/
-│   │   ├── claude.ts      # Anthropic API (streaming + non-streaming)
-│   │   ├── whisper.ts     # OpenAI Whisper STT
-│   │   ├── elevenlabs.ts  # ElevenLabs TTS
-│   │   └── chat-store.ts  # File-based JSON conversation persistence
+│   │   ├── claude.ts         # Anthropic API (streaming + non-streaming, settings-aware)
+│   │   ├── whisper.ts        # OpenAI Whisper STT (language from settings)
+│   │   ├── elevenlabs.ts     # ElevenLabs TTS (voice from settings)
+│   │   ├── chat-store.ts     # File-based JSON conversation persistence
+│   │   ├── settings-store.ts # File-based settings persistence
+│   │   └── env.ts            # Environment variable validation
 │   └── routes/
 │       ├── chat.ts           # POST /api/chat, /api/chat/stream
 │       ├── transcribe.ts     # POST /api/transcribe
 │       ├── speak.ts          # POST /api/speak
-│       └── conversations.ts  # GET/POST/PUT/DELETE /api/conversations
+│       ├── conversations.ts  # GET/POST/PUT/DELETE /api/conversations
+│       └── settings.ts       # GET/PUT /api/settings, GET /api/settings/voices
 ├── src/
 │   ├── components/
-│   │   ├── VoiceChat.tsx       # Main component with mode toggle + history
-│   │   ├── RecordButton.tsx    # Push-to-talk button
+│   │   ├── VoiceChat.tsx        # Main component with mode toggle + history + settings
+│   │   ├── RecordButton.tsx     # Push-to-talk button
 │   │   ├── ContinuousButton.tsx # Continuous conversation button
-│   │   ├── ConversationLog.tsx # Conversation log display
-│   │   └── ChatHistory.tsx     # History sidebar panel
+│   │   ├── ConversationLog.tsx  # Conversation log display
+│   │   ├── ChatHistory.tsx      # History sidebar panel (right)
+│   │   └── SettingsPanel.tsx    # Settings sidebar panel (left)
 │   ├── hooks/
 │   │   ├── useVoiceChat.ts          # Push-to-talk logic (with persistence)
 │   │   ├── useContinuousVoiceChat.ts # Continuous mode (with persistence)
 │   │   ├── useVAD.ts                 # Voice Activity Detection
 │   │   ├── useAudioRecorder.ts      # Manual recording
-│   │   └── useChatHistory.ts        # Chat history persistence hook
+│   │   ├── useChatHistory.ts        # Chat history persistence hook
+│   │   ├── useSettings.ts           # Settings management hook
+│   │   └── useWakeWord.ts           # Wake word detection (VAD + Whisper)
 │   └── lib/
 │       ├── api.ts             # API calls to server
-│       └── conversations.ts   # Conversations API client
+│       ├── conversations.ts   # Conversations API client
+│       ├── settings-api.ts    # Settings API client
+│       └── types.ts           # Shared types, models, languages
 ├── data/
-│   └── conversations/         # JSON files per conversation (gitignored)
-├── .env                   # API keys (not in git)
-├── .env.example           # Template
+│   ├── conversations/         # JSON files per conversation (gitignored)
+│   └── settings.json          # Persisted settings (gitignored)
+├── .env                       # API keys (not in git)
+├── .env.example               # Template
 ├── package.json
-├── vite.config.ts         # Includes CORS headers for ONNX
+├── vite.config.ts
 └── PROGRESS.md
 ```
 
 ---
 
-## זרימת העבודה
+## Workflows
 
-### מצב שיחה רציפה (ברירת מחדל):
+### Continuous Conversation (default):
 ```
-לחיצה "התחל שיחה"
+Click "Start Conversation"
     |
-VAD מאזין (Silero model)
+VAD listening (Silero model)
     |
-זיהוי דיבור -> state: "speaking"
+Speech detected -> state: "speaking"
     |
-זיהוי סוף דיבור -> state: "transcribing"
+End of speech -> state: "transcribing"
     |
 Whisper STT
     |
-Claude API -> state: "thinking"
+Claude API (model from settings) -> state: "thinking"
     |
-ElevenLabs TTS -> state: "responding"
+ElevenLabs TTS (voice from settings) -> state: "responding"
     |
-נגינת אודיו + auto-save לקובץ JSON
+Play audio + auto-save to JSON
     |
-חזרה ל-VAD מאזין
+Back to VAD listening
 ```
 
-### מצב לחץ-לדבר:
+### Push-to-Talk:
 ```
-לחיצה על כפתור -> הקלטה
+Button press -> recording
     |
-שחרור כפתור -> עצירת הקלטה
+Button release -> stop recording
     |
-Whisper -> Claude -> ElevenLabs -> נגינה + auto-save
+Whisper -> Claude -> ElevenLabs -> play + auto-save
 ```
 
-### היסטוריית שיחות:
+### Wake Word Detection:
 ```
-לחיצה על אייקון שעון (פינה ימנית עליונה)
+VAD listens for any speech
     |
-פאנל צד נפתח עם רשימת שיחות קודמות
+Speech detected -> Whisper transcribes
     |
-בחירת שיחה -> טעינת הודעות + המשך שיחה
+Check transcript for wake phrases ("hey claude", "hi claude", etc.)
     |
-"שיחה חדשה" -> התחלה מחדש
+If wake word found -> callback fires with remaining text
+If not found -> optionally notify (no action)
+```
+
+### Settings:
+```
+Click gear icon (top left)
     |
-מחיקת שיחה -> כפתור מחיקה בריחוף
+Settings panel opens with:
+  - Voice selection (from ElevenLabs API)
+  - Model selection (Sonnet 4 / Haiku 3.5 / Opus 4)
+  - Language selection (Hebrew, English, Arabic, etc.)
+  - System prompt editor
+    |
+Save -> persisted to data/settings.json
+    |
+All server endpoints read from settings automatically
 ```
 
 ---
 
-## הגדרות סביבה
+## Environment Setup
 
-### קובץ `.env` נדרש:
+### Required `.env`:
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 ELEVENLABS_API_KEY=...
-ELEVENLABS_VOICE_ID=... (אופציונלי, ברירת מחדל: Sarah)
+ELEVENLABS_VOICE_ID=... (optional, uses settings or default Sarah)
 ```
 
-### הפעלה:
+### Run:
 ```bash
 npm run dev
-# פותח: http://localhost:5173
+# Client: http://localhost:5173
 # Server: http://localhost:3001
 ```
 
 ---
 
-## היסטוריית שינויים
+## Change Log
 
-### 2026-02-13 - היסטוריית שיחות + תיקוני TypeScript
-**נוספו:**
+### 2026-02-13 - Settings Panel, Wake Word, Error Handling
+**Added:**
+- `src/components/SettingsPanel.tsx` - Left sidebar for voice/model/language/prompt settings
+- `src/hooks/useSettings.ts` - Settings state management hook
+- `src/lib/settings-api.ts` - Client API for settings endpoints
+- `src/lib/types.ts` - Shared types (VoiceOption, ModelOption, AppSettings, etc.)
+- `src/hooks/useWakeWord.ts` - Wake word detection using VAD + Whisper
+- `server/routes/settings.ts` - GET/PUT settings, GET voices from ElevenLabs
+- `server/lib/settings-store.ts` - File-based settings persistence
+- `server/lib/env.ts` - Environment variable validation at startup
+
+**Updated:**
+- `server/index.ts` - Added settings route, env validation on startup
+- `server/lib/claude.ts` - Reads model/system prompt from settings, accepts overrides
+- `server/lib/elevenlabs.ts` - Reads voice ID from settings, validates API key
+- `server/lib/whisper.ts` - Reads language from settings, supports auto-detect
+- `server/routes/chat.ts` - Better error handling, supports model override in request
+- `src/components/VoiceChat.tsx` - Integrated settings panel, updated UI text
+
+**Error Handling Improvements:**
+- Server validates required env vars before starting (exits with clear message)
+- ElevenLabs checks for missing API key before making requests
+- Chat streaming endpoint wraps body parsing in try/catch
+- Chat endpoint validates non-empty messages array
+- Settings API has proper error boundaries
+
+### 2026-02-13 - Chat History + TypeScript Fixes
+**Added:**
 - `server/lib/chat-store.ts` - File-based JSON storage for conversations
 - `server/routes/conversations.ts` - Full CRUD REST API for conversations
 - `src/lib/conversations.ts` - Client-side API for conversation endpoints
 - `src/hooks/useChatHistory.ts` - Hook for managing conversation persistence
 - `src/components/ChatHistory.tsx` - Sidebar panel for browsing/loading past conversations
 
-**עודכנו:**
+**Updated:**
 - `server/index.ts` - Added conversations route
 - `src/components/VoiceChat.tsx` - Integrated chat history sidebar + auto-save
 - `src/hooks/useVoiceChat.ts` - Added `initialMessages` + `onMessagesChange` options
 - `src/hooks/useContinuousVoiceChat.ts` - Added `initialMessages` + `onMessagesChange` options
-- `src/hooks/useVAD.ts` - Fixed TypeScript errors (frame-based -> ms-based API properties)
-- `.gitignore` - Added `data/` directory
+- `src/hooks/useVAD.ts` - Fixed TypeScript errors (ms-based API properties)
 
-**תיקוני TypeScript:**
-- Fixed `RealTimeVADOptions` import to use `type` import (verbatimModuleSyntax)
-- Fixed deprecated VAD options: `minSpeechFrames` -> `minSpeechMs`, `redemptionFrames` -> `redemptionMs`, `preSpeechPadFrames` -> `preSpeechPadMs`
-
-### 2026-02-02 - VAD + שיחה רציפה
-**נוספו:**
+### 2026-02-02 - VAD + Continuous Conversation
+**Added:**
 - `@ricky0123/vad-web` - Voice Activity Detection
-- `src/hooks/useVAD.ts` - hook ל-VAD עם Silero model
-- `src/hooks/useContinuousVoiceChat.ts` - לוגיקה של שיחה רציפה
-- `src/components/ContinuousButton.tsx` - UI עם states
-- Toggle בין "שיחה רציפה" ו"לחץ לדבר"
+- `src/hooks/useVAD.ts` - VAD hook with Silero model
+- `src/hooks/useContinuousVoiceChat.ts` - Continuous conversation logic
+- `src/components/ContinuousButton.tsx` - UI with visual states
+- Toggle between "continuous" and "push-to-talk"
 
-**עודכנו:**
-- `src/components/VoiceChat.tsx` - תמיכה בשני מצבים
-- `src/lib/api.ts` - תמיכה בפורמט WAV
-- `vite.config.ts` - CORS headers ל-SharedArrayBuffer
-
-### 2026-01-27 - בסיס הפרויקט
-- Hono server עם 3 routes
-- React frontend עם Vite
-- Push-to-talk בסיסי
+### 2026-01-27 - Project Foundation
+- Hono server with 3 routes (transcribe, chat, speak)
+- React frontend with Vite
+- Basic push-to-talk
 - Tailwind CSS
 
 ---
 
-## באגים ידועים
+## Known Issues
 
-| באג | סטטוס | הערות |
-|-----|-------|--------|
-| - | - | אין באגים ידועים כרגע |
-
----
-
-## רעיונות לעתיד
-
-1. **WebSocket streaming** - לשפר latency
-2. **Multi-language support** - זיהוי שפה אוטומטי
-3. **Voice cloning** - קול מותאם אישית
-4. **Electron app** - אפליקציה native
-5. **Mobile PWA** - תמיכה במובייל
+| Issue | Status | Notes |
+|-------|--------|-------|
+| None | - | No known issues |
 
 ---
 
-## תזכורת לסשן הבא
+## Future Ideas
 
-כשאני מתחיל סשן חדש:
-
-1. **קרא את הקובץ הזה** - `PROGRESS.md`
-2. **בדוק TypeScript:** `npx tsc --noEmit`
-3. **הפעל:** `npm run dev`
-4. **בדוק ב-browser:** `http://localhost:5173`
-5. **המשך מה-TODO למעלה**
-
-### יכולות זמינות (מתיקיית הבית):
-- **Skills** - `/commit`, `/review`, `/plan`, `/tdd`, וכו'
-- **Agents** - planner, code-reviewer, tdd-guide, security-reviewer
-- **MCPs** - Context7, Octocode, Ultracite ל-linting
-- **Rules** - LSP navigation, codebase exploration, error handling patterns
+1. **WebSocket streaming** - Improve latency
+2. **Multi-language support** - Auto language detection
+3. **Voice cloning** - Custom voice
+4. **Electron app** - Native application
+5. **Mobile PWA** - Mobile support
+6. **Wake word UI toggle** - Add to settings panel for hands-free activation
 
 ---
 
-*עודכן אוטומטית על ידי Claude*
+## Reminder for Next Session
+
+1. **Read this file** - `PROGRESS.md`
+2. **Check TypeScript:** `npx tsc --noEmit`
+3. **Run:** `npm run dev`
+4. **Check browser:** `http://localhost:5173`
+5. **Continue from TODO above**
+
+---
+
+*Updated automatically by Claude*

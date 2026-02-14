@@ -64,6 +64,9 @@ export function ChatHistory({
 
       {/* Sidebar panel */}
       <div
+        role="dialog"
+        aria-label="Chat history"
+        aria-hidden={!isOpen}
         className={`
           fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-40
           transition-transform duration-200 ease-in-out

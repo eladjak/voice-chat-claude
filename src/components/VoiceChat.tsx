@@ -25,11 +25,12 @@ export function VoiceChat() {
   const chatHistory = useChatHistory()
 
   // Shared callback for when messages change (auto-save)
+  const { saveMessages } = chatHistory
   const handleMessagesChange = useCallback(
     (messages: Message[]) => {
-      chatHistory.saveMessages(messages)
+      saveMessages(messages)
     },
-    [chatHistory.saveMessages]
+    [saveMessages]
   )
 
   // Memoize options to avoid re-creating on every render

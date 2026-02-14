@@ -84,6 +84,9 @@ export function SettingsPanel({
 
       {/* Settings panel */}
       <div
+        role="dialog"
+        aria-label="Settings"
+        aria-hidden={!isOpen}
         className={`
           fixed top-0 left-0 h-full w-96 bg-white shadow-2xl z-40
           transition-transform duration-200 ease-in-out

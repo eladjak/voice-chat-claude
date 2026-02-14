@@ -28,15 +28,20 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
   const messagesRef = useRef<Message[]>([])
   const processingRef = useRef(false)
 
-  // Keep messages ref in sync
-  messagesRef.current = messages
+  // Keep messages ref in sync for use in async callbacks
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
 
   // Sync messages from external source (e.g., loading a saved conversation)
-  useEffect(() => {
+  // setState during render is the React-recommended pattern for derived state
+  const [prevInitialMessages, setPrevInitialMessages] = useState(initialMessages)
+  if (initialMessages !== prevInitialMessages) {
+    setPrevInitialMessages(initialMessages)
     if (initialMessages) {
       setMessages(initialMessages)
     }
-  }, [initialMessages])
+  }
 
   // Notify parent when messages change
   const updateMessages = useCallback(

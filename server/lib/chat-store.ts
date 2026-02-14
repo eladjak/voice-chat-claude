@@ -88,8 +88,13 @@ export async function getConversation(id: string): Promise<Conversation | null> 
   const filePath = conversationPath(id)
   if (!existsSync(filePath)) return null
 
-  const data = await readFile(filePath, 'utf-8')
-  return JSON.parse(data) as Conversation
+  try {
+    const data = await readFile(filePath, 'utf-8')
+    return JSON.parse(data) as Conversation
+  } catch (err) {
+    console.error(`Failed to read conversation ${id}:`, err)
+    return null
+  }
 }
 
 export async function listConversations(): Promise<Omit<Conversation, 'messages'>[]> {
@@ -101,15 +106,20 @@ export async function listConversations(): Promise<Omit<Conversation, 'messages'
   const conversations: Omit<Conversation, 'messages'>[] = []
 
   for (const file of jsonFiles) {
-    const data = await readFile(join(DATA_DIR, file), 'utf-8')
-    const conv = JSON.parse(data) as Conversation
-    // Return without messages for the list (lighter payload)
-    conversations.push({
-      id: conv.id,
-      title: conv.title,
-      createdAt: conv.createdAt,
-      updatedAt: conv.updatedAt,
-    })
+    try {
+      const data = await readFile(join(DATA_DIR, file), 'utf-8')
+      const conv = JSON.parse(data) as Conversation
+      // Return without messages for the list (lighter payload)
+      conversations.push({
+        id: conv.id,
+        title: conv.title,
+        createdAt: conv.createdAt,
+        updatedAt: conv.updatedAt,
+      })
+    } catch (err) {
+      console.error(`Failed to read conversation file ${file}:`, err)
+      // Skip corrupted files instead of crashing
+    }
   }
 
   // Sort by updatedAt descending (most recent first)

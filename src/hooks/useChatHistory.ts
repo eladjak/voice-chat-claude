@@ -23,11 +23,6 @@ export function useChatHistory() {
   const [error, setError] = useState<string | null>(null)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load conversation list on mount
-  useEffect(() => {
-    loadConversations()
-  }, [])
-
   const loadConversations = useCallback(async () => {
     try {
       const list = await listConversations()
@@ -36,6 +31,11 @@ export function useChatHistory() {
       console.error('Failed to load conversations:', err)
     }
   }, [])
+
+  // Load conversation list on mount
+  useEffect(() => {
+    loadConversations()
+  }, [loadConversations])
 
   const loadConversation = useCallback(async (id: string): Promise<Message[]> => {
     setIsLoading(true)

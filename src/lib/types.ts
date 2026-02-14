@@ -60,6 +60,11 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     name: 'Claude Opus 4',
     description: 'Most capable - slower but thorough',
   },
+  {
+    id: 'claude-opus-4-6-20250616',
+    name: 'Claude Opus 4.6',
+    description: 'Latest flagship - deepest reasoning',
+  },
 ]
 
 /** Supported languages for Whisper transcription */

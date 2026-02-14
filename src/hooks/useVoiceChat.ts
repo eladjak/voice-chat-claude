@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { transcribeAudio, sendMessage, textToSpeech, type Message } from '../lib/api'
 import { useAudioRecorder } from './useAudioRecorder'
 
@@ -21,11 +21,14 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   const { startRecording, stopRecording, cancelRecording } = useAudioRecorder()
 
   // Sync messages from external source (e.g., loading a saved conversation)
-  useEffect(() => {
+  // setState during render is the React-recommended pattern for derived state
+  const [prevInitialMessages, setPrevInitialMessages] = useState(initialMessages)
+  if (initialMessages !== prevInitialMessages) {
+    setPrevInitialMessages(initialMessages)
     if (initialMessages) {
       setMessages(initialMessages)
     }
-  }, [initialMessages])
+  }
 
   // Notify parent when messages change
   const updateMessages = useCallback(

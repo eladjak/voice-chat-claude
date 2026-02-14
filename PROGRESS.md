@@ -1,7 +1,7 @@
 # Voice Chat Claude - Progress
 
-> **Last updated:** 2026-02-13
-> **Status:** Active - Settings panel, wake word, and error handling improvements added
+> **Last updated:** 2026-02-14
+> **Status:** Active - Lint fixes, accessibility improvements, model list update
 
 ---
 
@@ -169,6 +169,27 @@ npm run dev
 ---
 
 ## Change Log
+
+### 2026-02-14 - Lint Fixes, Accessibility, Error Handling
+**Fixed:**
+- `VoiceChat.tsx` - Resolved React Compiler memoization dependency issue by destructuring `saveMessages` from `chatHistory`
+- `useChatHistory.ts` - Fixed missing `loadConversations` dependency in `useEffect`
+- `useContinuousVoiceChat.ts` - Fixed ref access during render (moved `messagesRef.current` sync to `useEffect`)
+- `useVoiceChat.ts` - Replaced `setState`-in-effect pattern with React-recommended "setState during render" pattern for derived state
+- `useContinuousVoiceChat.ts` - Same derived state pattern fix
+
+**Improved:**
+- `chat-store.ts` - Added try/catch around `JSON.parse` in `getConversation` and `listConversations` to gracefully handle corrupted conversation files instead of crashing
+- `SettingsPanel.tsx` - Added `role="dialog"`, `aria-label`, and `aria-hidden` attributes for screen reader support
+- `ChatHistory.tsx` - Added `role="dialog"`, `aria-label`, and `aria-hidden` attributes for screen reader support
+- `index.html` - Updated page title from "voice-chat-claude" to "Voice Chat with Claude"
+
+**Added:**
+- `types.ts` - Added Claude Opus 4.6 model to the available models list
+
+**Verification:**
+- `npx tsc --noEmit` - 0 errors
+- `npx eslint .` - 0 errors, 0 warnings
 
 ### 2026-02-13 - Settings Panel, Wake Word, Error Handling
 **Added:**

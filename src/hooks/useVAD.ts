@@ -60,6 +60,9 @@ export function useVAD(options: UseVADOptions = {}) {
       const t = thresholdsRef.current
 
       const vadOptions: Partial<RealTimeVADOptions> = {
+        workletURL: '/vad/vad.worklet.bundle.min.js',
+        modelURL: '/vad/silero_vad_v5.onnx',
+        onnxWASMBasePath: '/vad/',
         onSpeechStart: () => {
           setIsSpeaking(true)
           callbacksRef.current.onSpeechStart?.()

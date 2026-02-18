@@ -1,15 +1,36 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { MicVAD, type RealTimeVADOptions } from '@ricky0123/vad-web'
 
+export interface VADThresholds {
+  positiveSpeechThreshold: number
+  negativeSpeechThreshold: number
+  minSpeechMs: number
+  redemptionMs: number
+}
+
+export const DEFAULT_VAD_THRESHOLDS: VADThresholds = {
+  positiveSpeechThreshold: 0.8,
+  negativeSpeechThreshold: 0.3,
+  minSpeechMs: 150,
+  redemptionMs: 300,
+}
+
 export interface UseVADOptions {
   onSpeechStart?: () => void
   onSpeechEnd?: (audio: Float32Array) => void
   onVADMisfire?: () => void
   enabled?: boolean
+  thresholds?: Partial<VADThresholds>
 }
 
 export function useVAD(options: UseVADOptions = {}) {
-  const { onSpeechStart, onSpeechEnd, onVADMisfire, enabled = true } = options
+  const {
+    onSpeechStart,
+    onSpeechEnd,
+    onVADMisfire,
+    enabled = true,
+    thresholds,
+  } = options
 
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -18,6 +39,11 @@ export function useVAD(options: UseVADOptions = {}) {
 
   const vadRef = useRef<MicVAD | null>(null)
   const callbacksRef = useRef({ onSpeechStart, onSpeechEnd, onVADMisfire })
+
+  // Merge thresholds with defaults
+  const resolvedThresholds = { ...DEFAULT_VAD_THRESHOLDS, ...thresholds }
+  const thresholdsRef = useRef(resolvedThresholds)
+  thresholdsRef.current = resolvedThresholds
 
   // Keep callbacks ref updated
   useEffect(() => {
@@ -31,6 +57,8 @@ export function useVAD(options: UseVADOptions = {}) {
     setError(null)
 
     try {
+      const t = thresholdsRef.current
+
       const vadOptions: Partial<RealTimeVADOptions> = {
         onSpeechStart: () => {
           setIsSpeaking(true)
@@ -44,10 +72,10 @@ export function useVAD(options: UseVADOptions = {}) {
           setIsSpeaking(false)
           callbacksRef.current.onVADMisfire?.()
         },
-        positiveSpeechThreshold: 0.8,
-        negativeSpeechThreshold: 0.3,
-        minSpeechMs: 150,
-        redemptionMs: 300,
+        positiveSpeechThreshold: t.positiveSpeechThreshold,
+        negativeSpeechThreshold: t.negativeSpeechThreshold,
+        minSpeechMs: t.minSpeechMs,
+        redemptionMs: t.redemptionMs,
         preSpeechPadMs: 90,
       }
 
@@ -57,7 +85,6 @@ export function useVAD(options: UseVADOptions = {}) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start VAD'
       setError(message)
-      console.error('VAD error:', err)
     } finally {
       setIsLoading(false)
     }

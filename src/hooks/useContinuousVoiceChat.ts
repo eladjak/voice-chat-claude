@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { transcribeAudio, sendMessage, textToSpeech, type Message } from '../lib/api'
+import { transcribeAudio, streamMessage, textToSpeech, type Message, type StreamController } from '../lib/api'
 import { useVAD, float32ToWavBlob } from './useVAD'
 
 export type ContinuousChatState =
@@ -21,12 +21,14 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? [])
   const [error, setError] = useState<string | null>(null)
   const [currentTranscript, setCurrentTranscript] = useState<string>('')
+  const [streamingResponse, setStreamingResponse] = useState<string>('')
   const [isEnabled, setIsEnabled] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUrlRef = useRef<string | null>(null)
   const messagesRef = useRef<Message[]>([])
   const processingRef = useRef(false)
+  const streamControllerRef = useRef<StreamController | null>(null)
 
   // Keep messages ref in sync for use in async callbacks
   useEffect(() => {
@@ -59,6 +61,23 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
     }
   }, [])
 
+  const interruptResponse = useCallback(() => {
+    // Abort any ongoing stream
+    if (streamControllerRef.current) {
+      streamControllerRef.current.abort()
+      streamControllerRef.current = null
+    }
+
+    // Stop any playing audio
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+    cleanupAudio()
+    setStreamingResponse('')
+    processingRef.current = false
+  }, [cleanupAudio])
+
   const handleSpeechEnd = useCallback(async (audio: Float32Array) => {
     // Prevent overlapping processing
     if (processingRef.current) return
@@ -86,60 +105,81 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
       const newMessages = [...messagesRef.current, userMessage]
       updateMessages(newMessages)
 
-      // Get Claude's response
+      // Get Claude's response via streaming
       setState('thinking')
-      const response = await sendMessage(newMessages)
+      setStreamingResponse('')
 
-      // Add assistant message
-      const assistantMessage: Message = { role: 'assistant', content: response }
-      updateMessages([...newMessages, assistantMessage])
+      const controller = streamMessage(
+        newMessages,
+        (chunk) => {
+          setStreamingResponse((prev) => prev + chunk)
+        },
+        async (fullText) => {
+          streamControllerRef.current = null
+          setStreamingResponse('')
 
-      // Convert to speech and play
-      setState('responding')
-      const speechBlob = await textToSpeech(response)
+          // Add assistant message
+          const assistantMessage: Message = { role: 'assistant', content: fullText }
+          updateMessages([...newMessages, assistantMessage])
 
-      cleanupAudio()
-      const url = URL.createObjectURL(speechBlob)
-      audioUrlRef.current = url
+          // Convert to speech and play
+          setState('responding')
+          try {
+            const speechBlob = await textToSpeech(fullText)
 
-      if (!audioRef.current) {
-        audioRef.current = new Audio()
-      }
+            cleanupAudio()
+            const url = URL.createObjectURL(speechBlob)
+            audioUrlRef.current = url
 
-      audioRef.current.src = url
-      audioRef.current.onended = () => {
-        cleanupAudio()
-        setState('listening')
-        processingRef.current = false
-      }
-      audioRef.current.onerror = () => {
-        cleanupAudio()
-        setError('Failed to play audio')
-        setState('listening')
-        processingRef.current = false
-      }
+            if (!audioRef.current) {
+              audioRef.current = new Audio()
+            }
 
-      await audioRef.current.play()
+            audioRef.current.src = url
+            audioRef.current.onended = () => {
+              cleanupAudio()
+              setState('listening')
+              processingRef.current = false
+            }
+            audioRef.current.onerror = () => {
+              cleanupAudio()
+              setError('Failed to play audio')
+              setState('listening')
+              processingRef.current = false
+            }
+
+            await audioRef.current.play()
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'TTS failed'
+            setError(message)
+            setState('listening')
+            processingRef.current = false
+          }
+        },
+        (err) => {
+          streamControllerRef.current = null
+          setStreamingResponse('')
+          setError(err.message)
+          setState('listening')
+          processingRef.current = false
+        },
+      )
+
+      streamControllerRef.current = controller
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred'
       setError(message)
       setState('listening')
       processingRef.current = false
-      console.error('Continuous voice chat error:', err)
     }
   }, [cleanupAudio, updateMessages])
 
   const handleSpeechStart = useCallback(() => {
-    // Stop any playing audio when user starts speaking
-    if (audioRef.current && !audioRef.current.paused) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-      cleanupAudio()
-      processingRef.current = false
-    }
+    // Interrupt any ongoing response when user starts speaking
+    interruptResponse()
     setState('speaking')
     setCurrentTranscript('')
-  }, [cleanupAudio])
+  }, [interruptResponse])
 
   const { isListening, isSpeaking, isLoading, error: vadError } = useVAD({
     enabled: isEnabled,
@@ -161,18 +201,14 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
 
   const stopContinuousMode = useCallback(() => {
     setIsEnabled(false)
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-    }
-    cleanupAudio()
-    processingRef.current = false
+    interruptResponse()
     setState('idle')
-  }, [cleanupAudio])
+  }, [interruptResponse])
 
   const clearMessages = useCallback(() => {
     updateMessages([])
     setCurrentTranscript('')
+    setStreamingResponse('')
     setError(null)
   }, [updateMessages])
 
@@ -184,12 +220,14 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
     messages,
     error: combinedError,
     currentTranscript,
+    streamingResponse,
     isEnabled,
     isLoading,
     isListening,
     isSpeaking,
     startContinuousMode,
     stopContinuousMode,
+    interruptResponse,
     clearMessages,
   }
 }

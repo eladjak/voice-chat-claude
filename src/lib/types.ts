@@ -13,12 +13,21 @@ export interface ModelOption {
   description: string
 }
 
+/** VAD threshold settings */
+export interface VADSettings {
+  positiveSpeechThreshold: number
+  negativeSpeechThreshold: number
+  minSpeechMs: number
+  redemptionMs: number
+}
+
 /** Application settings persisted to server */
 export interface AppSettings {
   voiceId: string
   modelId: string
   systemPrompt: string
   language: string
+  vad: VADSettings
 }
 
 /** Available configuration options from server */
@@ -34,6 +43,14 @@ export interface LanguageOption {
   name: string
 }
 
+/** Default VAD settings */
+export const DEFAULT_VAD_SETTINGS: VADSettings = {
+  positiveSpeechThreshold: 0.8,
+  negativeSpeechThreshold: 0.3,
+  minSpeechMs: 150,
+  redemptionMs: 300,
+}
+
 /** Default settings */
 export const DEFAULT_SETTINGS: AppSettings = {
   voiceId: 'EXAVITQu4vr4xnSDxMaL', // Sarah
@@ -41,6 +58,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   systemPrompt:
     'You are a helpful voice assistant. Keep responses concise and conversational since they will be spoken aloud. Respond in the same language the user speaks.',
   language: 'he',
+  vad: DEFAULT_VAD_SETTINGS,
 }
 
 /** Available models for selection */

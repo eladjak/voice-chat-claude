@@ -41,50 +41,83 @@ export async function sendMessage(messages: Message[]): Promise<string> {
   return data.response
 }
 
-export async function* streamMessage(
-  messages: Message[]
-): AsyncGenerator<string> {
-  const response = await fetch('/api/chat/stream', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ messages }),
-  })
+export interface StreamController {
+  abort: () => void
+}
 
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Stream failed')
-  }
+export async function streamMessage(
+  messages: Message[],
+  onChunk: (chunk: string) => void,
+  onDone: (fullText: string) => void,
+  onError: (error: Error) => void,
+): StreamController {
+  const abortController = new AbortController()
 
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('No response body')
+  const run = async () => {
+    try {
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages }),
+        signal: abortController.signal,
+      })
 
-  const decoder = new TextDecoder()
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Stream failed')
+      }
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No response body')
 
-    const text = decoder.decode(value)
-    const lines = text.split('\n')
+      const decoder = new TextDecoder()
+      let fullText = ''
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.text) {
-            yield data.text
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const text = decoder.decode(value)
+        const lines = text.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.text) {
+                fullText += data.text
+                onChunk(data.text)
+              }
+              if (data.error) {
+                onError(new Error(data.error))
+                return
+              }
+              if (data.done) {
+                onDone(fullText)
+                return
+              }
+            } catch {
+              // Skip invalid JSON
+            }
           }
-          if (data.done || data.error) {
-            return
-          }
-        } catch {
-          // Skip invalid JSON
         }
       }
+
+      onDone(fullText)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // Stream was intentionally aborted - not an error
+        return
+      }
+      onError(err instanceof Error ? err : new Error('Stream failed'))
     }
   }
+
+  run()
+
+  return { abort: () => abortController.abort() }
 }
 
 export async function textToSpeech(text: string): Promise<Blob> {

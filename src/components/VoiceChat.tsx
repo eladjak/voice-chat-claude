@@ -4,11 +4,13 @@ import { useVoiceChat } from '../hooks/useVoiceChat'
 import { useContinuousVoiceChat } from '../hooks/useContinuousVoiceChat'
 import { useChatHistory } from '../hooks/useChatHistory'
 import { useSettings } from '../hooks/useSettings'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { RecordButton } from './RecordButton'
 import { ContinuousButton } from './ContinuousButton'
 import { ConversationLog } from './ConversationLog'
 import { ChatHistory } from './ChatHistory'
 import { SettingsPanel } from './SettingsPanel'
+import { Waveform } from './Waveform'
 
 type Mode = 'push-to-talk' | 'continuous'
 
@@ -49,7 +51,17 @@ export function VoiceChat() {
   const messages = isPushToTalk ? pushToTalk.messages : continuous.messages
   const error = isPushToTalk ? pushToTalk.error : continuous.error
   const currentTranscript = isPushToTalk ? pushToTalk.currentTranscript : continuous.currentTranscript
+  const streamingResponse = isPushToTalk ? pushToTalk.streamingResponse : continuous.streamingResponse
   const clearMessages = isPushToTalk ? pushToTalk.clearMessages : continuous.clearMessages
+
+  // Determine if waveform should be active
+  const isProcessing = isPushToTalk
+    ? pushToTalk.state === 'thinking' || pushToTalk.state === 'speaking'
+    : continuous.state === 'thinking' || continuous.state === 'responding'
+
+  const waveformColor = isPushToTalk
+    ? (pushToTalk.state === 'speaking' ? '#22c55e' : '#8b5cf6')
+    : (continuous.state === 'responding' ? '#22c55e' : '#8b5cf6')
 
   const handleModeChange = (newMode: Mode) => {
     // Stop current mode before switching
@@ -81,6 +93,29 @@ export function VoiceChat() {
     chatHistory.startNewConversation()
     setLoadedMessages(undefined)
   }, [clearMessages, chatHistory])
+
+  // Keyboard shortcuts: Space = push-to-talk, Escape = cancel/stop
+  useKeyboardShortcuts({
+    onSpaceDown: () => {
+      if (isPushToTalk && pushToTalk.state === 'idle') {
+        pushToTalk.handleStartRecording()
+      }
+    },
+    onSpaceUp: () => {
+      if (isPushToTalk && pushToTalk.state === 'recording') {
+        pushToTalk.handleStopRecording()
+      }
+    },
+    onEscape: () => {
+      if (isPushToTalk) {
+        pushToTalk.handleCancel()
+      } else {
+        if (continuous.isEnabled) {
+          continuous.stopContinuousMode()
+        }
+      }
+    },
+  })
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-gray-50 to-gray-100 py-12 px-4" dir="rtl">
@@ -116,6 +151,11 @@ export function VoiceChat() {
             {mode === 'continuous'
               ? 'Just speak - Claude is listening and will respond automatically'
               : 'Press the button and speak - Claude will listen and respond'}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            {isPushToTalk
+              ? 'Space = push-to-talk | Escape = cancel'
+              : 'Escape = stop conversation'}
           </p>
         </header>
 
@@ -162,6 +202,13 @@ export function VoiceChat() {
             />
           )}
 
+          {/* Waveform animation during processing/speaking */}
+          {isProcessing && (
+            <div className="mt-4">
+              <Waveform isActive={isProcessing} color={waveformColor} />
+            </div>
+          )}
+
           {error && (
             <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 max-w-md text-center">
               <p>{error}</p>
@@ -171,6 +218,7 @@ export function VoiceChat() {
           <ConversationLog
             messages={messages}
             currentTranscript={currentTranscript}
+            streamingResponse={streamingResponse}
             onClear={handleClearMessages}
           />
         </div>

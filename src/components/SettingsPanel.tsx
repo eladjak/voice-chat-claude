@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { AppSettings, VoiceOption, ModelOption, LanguageOption } from '../lib/types'
+import { DEFAULT_VAD_SETTINGS } from '../lib/types'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -28,6 +29,7 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [showVAD, setShowVAD] = useState(false)
 
   // Sync local state when settings load/change externally
   useEffect(() => {
@@ -49,7 +51,18 @@ export function SettingsPanel({
     localSettings.voiceId !== settings.voiceId ||
     localSettings.modelId !== settings.modelId ||
     localSettings.systemPrompt !== settings.systemPrompt ||
-    localSettings.language !== settings.language
+    localSettings.language !== settings.language ||
+    localSettings.vad.positiveSpeechThreshold !== (settings.vad?.positiveSpeechThreshold ?? DEFAULT_VAD_SETTINGS.positiveSpeechThreshold) ||
+    localSettings.vad.negativeSpeechThreshold !== (settings.vad?.negativeSpeechThreshold ?? DEFAULT_VAD_SETTINGS.negativeSpeechThreshold) ||
+    localSettings.vad.minSpeechMs !== (settings.vad?.minSpeechMs ?? DEFAULT_VAD_SETTINGS.minSpeechMs) ||
+    localSettings.vad.redemptionMs !== (settings.vad?.redemptionMs ?? DEFAULT_VAD_SETTINGS.redemptionMs)
+
+  const updateVAD = (key: keyof AppSettings['vad'], value: number) => {
+    setLocalSettings({
+      ...localSettings,
+      vad: { ...localSettings.vad, [key]: value },
+    })
+  }
 
   return (
     <>
@@ -200,6 +213,132 @@ export function SettingsPanel({
                   <p className="text-xs text-gray-400 mt-1">
                     This defines Claude's behavior and personality during voice conversations.
                   </p>
+                </div>
+
+                {/* VAD Settings (collapsible) */}
+                <div className="border border-gray-200 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setShowVAD(!showVAD)}
+                    className="w-full flex items-center justify-between p-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
+                  >
+                    <span>Voice Detection (VAD)</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${showVAD ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showVAD && (
+                    <div className="p-3 pt-0 space-y-4">
+                      <p className="text-xs text-gray-400">
+                        Adjust these to reduce false positives or improve detection sensitivity.
+                      </p>
+
+                      {/* Positive Speech Threshold */}
+                      <div>
+                        <label htmlFor="vad-positive" className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                          <span>Speech detection sensitivity</span>
+                          <span className="font-mono">{localSettings.vad.positiveSpeechThreshold.toFixed(2)}</span>
+                        </label>
+                        <input
+                          id="vad-positive"
+                          type="range"
+                          min="0.5"
+                          max="0.99"
+                          step="0.01"
+                          value={localSettings.vad.positiveSpeechThreshold}
+                          onChange={(e) => updateVAD('positiveSpeechThreshold', parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-400">
+                          <span>Sensitive</span>
+                          <span>Strict</span>
+                        </div>
+                      </div>
+
+                      {/* Negative Speech Threshold */}
+                      <div>
+                        <label htmlFor="vad-negative" className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                          <span>End-of-speech sensitivity</span>
+                          <span className="font-mono">{localSettings.vad.negativeSpeechThreshold.toFixed(2)}</span>
+                        </label>
+                        <input
+                          id="vad-negative"
+                          type="range"
+                          min="0.1"
+                          max="0.7"
+                          step="0.01"
+                          value={localSettings.vad.negativeSpeechThreshold}
+                          onChange={(e) => updateVAD('negativeSpeechThreshold', parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-400">
+                          <span>Quick cutoff</span>
+                          <span>Lenient</span>
+                        </div>
+                      </div>
+
+                      {/* Min Speech Duration */}
+                      <div>
+                        <label htmlFor="vad-min-speech" className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                          <span>Min speech duration</span>
+                          <span className="font-mono">{localSettings.vad.minSpeechMs}ms</span>
+                        </label>
+                        <input
+                          id="vad-min-speech"
+                          type="range"
+                          min="50"
+                          max="500"
+                          step="10"
+                          value={localSettings.vad.minSpeechMs}
+                          onChange={(e) => updateVAD('minSpeechMs', parseInt(e.target.value))}
+                          className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-400">
+                          <span>50ms</span>
+                          <span>500ms</span>
+                        </div>
+                      </div>
+
+                      {/* Redemption Period */}
+                      <div>
+                        <label htmlFor="vad-redemption" className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                          <span>Silence tolerance (pause length)</span>
+                          <span className="font-mono">{localSettings.vad.redemptionMs}ms</span>
+                        </label>
+                        <input
+                          id="vad-redemption"
+                          type="range"
+                          min="100"
+                          max="1000"
+                          step="50"
+                          value={localSettings.vad.redemptionMs}
+                          onChange={(e) => updateVAD('redemptionMs', parseInt(e.target.value))}
+                          className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-400">
+                          <span>100ms</span>
+                          <span>1000ms</span>
+                        </div>
+                      </div>
+
+                      {/* Reset to defaults */}
+                      <button
+                        type="button"
+                        onClick={() => setLocalSettings({ ...localSettings, vad: { ...DEFAULT_VAD_SETTINGS } })}
+                        className="text-xs text-blue-500 hover:text-blue-700 underline"
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

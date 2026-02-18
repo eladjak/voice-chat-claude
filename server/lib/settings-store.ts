@@ -2,11 +2,26 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { existsSync } from 'node:fs'
 
+export interface VADSettings {
+  positiveSpeechThreshold: number
+  negativeSpeechThreshold: number
+  minSpeechMs: number
+  redemptionMs: number
+}
+
 export interface AppSettings {
   voiceId: string
   modelId: string
   systemPrompt: string
   language: string
+  vad: VADSettings
+}
+
+const DEFAULT_VAD_SETTINGS: VADSettings = {
+  positiveSpeechThreshold: 0.8,
+  negativeSpeechThreshold: 0.3,
+  minSpeechMs: 150,
+  redemptionMs: 300,
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -15,6 +30,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   systemPrompt:
     'You are a helpful voice assistant. Keep responses concise and conversational since they will be spoken aloud. Respond in the same language the user speaks.',
   language: 'he',
+  vad: DEFAULT_VAD_SETTINGS,
 }
 
 const SETTINGS_PATH = join(process.cwd(), 'data', 'settings.json')
@@ -36,8 +52,12 @@ export async function getSettings(): Promise<AppSettings> {
   try {
     const data = await readFile(SETTINGS_PATH, 'utf-8')
     const parsed = JSON.parse(data) as Partial<AppSettings>
-    // Merge with defaults to ensure all fields exist
-    return { ...DEFAULT_SETTINGS, ...parsed }
+    // Merge with defaults to ensure all fields exist, including nested vad
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      vad: { ...DEFAULT_VAD_SETTINGS, ...(parsed.vad || {}) },
+    }
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -47,7 +67,11 @@ export async function saveSettings(settings: Partial<AppSettings>): Promise<AppS
   await ensureDir()
 
   const current = await getSettings()
-  const updated: AppSettings = { ...current, ...settings }
+  const updated: AppSettings = {
+    ...current,
+    ...settings,
+    vad: { ...current.vad, ...(settings.vad || {}) },
+  }
 
   await writeFile(SETTINGS_PATH, JSON.stringify(updated, null, 2), 'utf-8')
   return updated

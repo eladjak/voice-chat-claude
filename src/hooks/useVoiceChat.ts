@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { transcribeAudio, sendMessage, textToSpeech, type Message } from '../lib/api'
+import { transcribeAudio, streamMessage, textToSpeech, type Message, type StreamController } from '../lib/api'
 import { useAudioRecorder } from './useAudioRecorder'
 
 export type ChatState = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'speaking'
@@ -15,8 +15,10 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? [])
   const [error, setError] = useState<string | null>(null)
   const [currentTranscript, setCurrentTranscript] = useState<string>('')
+  const [streamingResponse, setStreamingResponse] = useState<string>('')
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUrlRef = useRef<string | null>(null)
+  const streamControllerRef = useRef<StreamController | null>(null)
 
   const { startRecording, stopRecording, cancelRecording } = useAudioRecorder()
 
@@ -73,6 +75,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   const handleStartRecording = useCallback(async () => {
     setError(null)
     setCurrentTranscript('')
+    setStreamingResponse('')
     await startRecording()
     setState('recording')
   }, [startRecording])
@@ -101,28 +104,59 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       const newMessages = [...messages, userMessage]
       updateMessages(newMessages)
 
-      // Get Claude's response
+      // Get Claude's response via streaming
       setState('thinking')
-      const response = await sendMessage(newMessages)
+      setStreamingResponse('')
 
-      // Add assistant message
-      const assistantMessage: Message = { role: 'assistant', content: response }
-      updateMessages([...newMessages, assistantMessage])
+      const controller = streamMessage(
+        newMessages,
+        (chunk) => {
+          setStreamingResponse((prev) => prev + chunk)
+        },
+        async (fullText) => {
+          streamControllerRef.current = null
+          setStreamingResponse('')
 
-      // Convert to speech
-      setState('speaking')
-      const speechBlob = await textToSpeech(response)
-      await playAudio(speechBlob)
+          // Add assistant message
+          const assistantMessage: Message = { role: 'assistant', content: fullText }
+          updateMessages([...newMessages, assistantMessage])
+
+          // Convert to speech
+          setState('speaking')
+          try {
+            const speechBlob = await textToSpeech(fullText)
+            await playAudio(speechBlob)
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'TTS failed'
+            setError(message)
+            setState('idle')
+          }
+        },
+        (err) => {
+          streamControllerRef.current = null
+          setStreamingResponse('')
+          setError(err.message)
+          setState('idle')
+        },
+      )
+
+      streamControllerRef.current = controller
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred'
       setError(message)
       setState('idle')
-      console.error('Voice chat error:', err)
     }
   }, [stopRecording, messages, playAudio, updateMessages])
 
   const handleCancel = useCallback(() => {
     cancelRecording()
+
+    // Abort any ongoing stream
+    if (streamControllerRef.current) {
+      streamControllerRef.current.abort()
+      streamControllerRef.current = null
+    }
+
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
@@ -130,11 +164,13 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     cleanupAudio()
     setState('idle')
     setCurrentTranscript('')
+    setStreamingResponse('')
   }, [cancelRecording, cleanupAudio])
 
   const clearMessages = useCallback(() => {
     updateMessages([])
     setCurrentTranscript('')
+    setStreamingResponse('')
     setError(null)
   }, [updateMessages])
 
@@ -143,6 +179,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     messages,
     error,
     currentTranscript,
+    streamingResponse,
     handleStartRecording,
     handleStopRecording,
     handleCancel,

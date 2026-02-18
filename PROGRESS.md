@@ -1,7 +1,7 @@
 # Voice Chat Claude - Progress
 
-> **Last updated:** 2026-02-14
-> **Status:** Active - Lint fixes, accessibility improvements, model list update
+> **Last updated:** 2026-02-18
+> **Status:** Active - Streaming, interruption, waveform, export, keyboard shortcuts, VAD config
 
 ---
 
@@ -23,16 +23,20 @@
 | **Settings panel** | Done | `src/components/SettingsPanel.tsx` + `src/hooks/useSettings.ts` |
 | **Wake word detection** | Done | `src/hooks/useWakeWord.ts` |
 | **Env validation** | Done | `server/lib/env.ts` |
+| **Streaming responses** | Done | `src/lib/api.ts` (streamMessage with AbortController) |
+| **Interruption handling** | Done | Both voice chat hooks support abort + audio stop |
+| **Waveform animation** | Done | `src/components/Waveform.tsx` |
+| **Conversation export** | Done | `src/components/ConversationLog.tsx` (text + JSON) |
+| **Keyboard shortcuts** | Done | `src/hooks/useKeyboardShortcuts.ts` |
+| **VAD threshold config** | Done | `src/components/SettingsPanel.tsx` (collapsible VAD section) |
 | **TypeScript** | Done | No errors |
 
 ### TODO:
 
 | Feature | Priority | Complexity | Notes |
 |---------|----------|------------|-------|
-| Streaming TTS | Medium | High | Reduce latency |
-| Interruption handling | Medium | Medium | Graceful stop of response |
+| Streaming TTS | Low | High | Stream TTS audio chunks as Claude tokens arrive |
 | Wake word integration in UI | Low | Low | Add toggle in settings, connect hook to continuous mode |
-| WebSocket streaming | Low | High | Replace SSE with WebSocket for bidirectional |
 
 ---
 
@@ -47,7 +51,7 @@ voice-chat-claude/
 │   │   ├── whisper.ts        # OpenAI Whisper STT (language from settings)
 │   │   ├── elevenlabs.ts     # ElevenLabs TTS (voice from settings)
 │   │   ├── chat-store.ts     # File-based JSON conversation persistence
-│   │   ├── settings-store.ts # File-based settings persistence
+│   │   ├── settings-store.ts # File-based settings persistence (incl. VAD thresholds)
 │   │   └── env.ts            # Environment variable validation
 │   └── routes/
 │       ├── chat.ts           # POST /api/chat, /api/chat/stream
@@ -57,28 +61,30 @@ voice-chat-claude/
 │       └── settings.ts       # GET/PUT /api/settings, GET /api/settings/voices
 ├── src/
 │   ├── components/
-│   │   ├── VoiceChat.tsx        # Main component with mode toggle + history + settings
+│   │   ├── VoiceChat.tsx        # Main component with mode toggle + history + settings + shortcuts
 │   │   ├── RecordButton.tsx     # Push-to-talk button
 │   │   ├── ContinuousButton.tsx # Continuous conversation button
-│   │   ├── ConversationLog.tsx  # Conversation log display
+│   │   ├── ConversationLog.tsx  # Conversation log + streaming display + export
 │   │   ├── ChatHistory.tsx      # History sidebar panel (right)
-│   │   └── SettingsPanel.tsx    # Settings sidebar panel (left)
+│   │   ├── SettingsPanel.tsx    # Settings sidebar panel (left) with VAD config
+│   │   └── Waveform.tsx         # Visual waveform animation component
 │   ├── hooks/
-│   │   ├── useVoiceChat.ts          # Push-to-talk logic (with persistence)
-│   │   ├── useContinuousVoiceChat.ts # Continuous mode (with persistence)
-│   │   ├── useVAD.ts                 # Voice Activity Detection
+│   │   ├── useVoiceChat.ts          # Push-to-talk logic (streaming + interruption)
+│   │   ├── useContinuousVoiceChat.ts # Continuous mode (streaming + interruption)
+│   │   ├── useVAD.ts                 # Voice Activity Detection (configurable thresholds)
 │   │   ├── useAudioRecorder.ts      # Manual recording
 │   │   ├── useChatHistory.ts        # Chat history persistence hook
 │   │   ├── useSettings.ts           # Settings management hook
-│   │   └── useWakeWord.ts           # Wake word detection (VAD + Whisper)
+│   │   ├── useWakeWord.ts           # Wake word detection (VAD + Whisper)
+│   │   └── useKeyboardShortcuts.ts  # Keyboard shortcuts (Space, Escape)
 │   └── lib/
-│       ├── api.ts             # API calls to server
+│       ├── api.ts             # API calls (streamMessage with AbortController)
 │       ├── conversations.ts   # Conversations API client
 │       ├── settings-api.ts    # Settings API client
-│       └── types.ts           # Shared types, models, languages
+│       └── types.ts           # Shared types, models, languages, VAD settings
 ├── data/
 │   ├── conversations/         # JSON files per conversation (gitignored)
-│   └── settings.json          # Persisted settings (gitignored)
+│   └── settings.json          # Persisted settings incl. VAD (gitignored)
 ├── .env                       # API keys (not in git)
 ├── .env.example               # Template
 ├── package.json
@@ -94,7 +100,7 @@ voice-chat-claude/
 ```
 Click "Start Conversation"
     |
-VAD listening (Silero model)
+VAD listening (Silero model, configurable thresholds)
     |
 Speech detected -> state: "speaking"
     |
@@ -102,34 +108,44 @@ End of speech -> state: "transcribing"
     |
 Whisper STT
     |
-Claude API (model from settings) -> state: "thinking"
+Claude API STREAMING (tokens arrive one by one) -> state: "thinking"
     |
-ElevenLabs TTS (voice from settings) -> state: "responding"
+Stream complete -> ElevenLabs TTS -> state: "responding"
     |
-Play audio + auto-save to JSON
+Play audio + waveform animation + auto-save to JSON
     |
 Back to VAD listening
 ```
 
 ### Push-to-Talk:
 ```
-Button press -> recording
+Button press (or Space key) -> recording
     |
-Button release -> stop recording
+Button release (or Space release) -> stop recording
     |
-Whisper -> Claude -> ElevenLabs -> play + auto-save
+Whisper -> Claude (streaming) -> ElevenLabs -> play + waveform + auto-save
 ```
 
-### Wake Word Detection:
+### Interruption:
 ```
-VAD listens for any speech
-    |
-Speech detected -> Whisper transcribes
-    |
-Check transcript for wake phrases ("hey claude", "hi claude", etc.)
-    |
-If wake word found -> callback fires with remaining text
-If not found -> optionally notify (no action)
+During "thinking" or "responding":
+  - User speaks (continuous mode) -> aborts stream + stops audio
+  - Press Escape -> stops everything
+  - Click mic button -> cancels current response
+```
+
+### Keyboard Shortcuts:
+```
+Space (push-to-talk mode) -> hold to record, release to send
+Escape -> cancel/stop (both modes)
+Note: disabled when focus is in input/textarea/select
+```
+
+### Export:
+```
+Click export button in conversation log
+  -> Download as .txt (human-readable)
+  -> Download as .json (machine-readable)
 ```
 
 ### Settings:
@@ -138,9 +154,14 @@ Click gear icon (top left)
     |
 Settings panel opens with:
   - Voice selection (from ElevenLabs API)
-  - Model selection (Sonnet 4 / Haiku 3.5 / Opus 4)
+  - Model selection (Sonnet 4 / Haiku 3.5 / Opus 4 / Opus 4.6)
   - Language selection (Hebrew, English, Arabic, etc.)
   - System prompt editor
+  - VAD thresholds (collapsible):
+    - Speech detection sensitivity (0.5-0.99)
+    - End-of-speech sensitivity (0.1-0.7)
+    - Min speech duration (50-500ms)
+    - Silence tolerance (100-1000ms)
     |
 Save -> persisted to data/settings.json
     |
@@ -169,6 +190,52 @@ npm run dev
 ---
 
 ## Change Log
+
+### 2026-02-18 - Streaming, Interruption, Waveform, Export, Shortcuts, VAD Config
+
+**Feature 1: WebSocket/SSE Streaming for Claude Responses**
+- `src/lib/api.ts` - Rewrote `streamMessage` from AsyncGenerator to callback-based with AbortController support
+- `src/hooks/useVoiceChat.ts` - Uses streaming API, shows tokens as they arrive via `streamingResponse` state
+- `src/hooks/useContinuousVoiceChat.ts` - Same streaming integration
+- `src/components/ConversationLog.tsx` - Displays streaming response with animated cursor
+
+**Feature 2: Interruption Handling**
+- Both hooks now have `streamControllerRef` that can abort the fetch stream mid-response
+- `useContinuousVoiceChat.ts` - `interruptResponse()` function aborts stream + stops audio
+- `useVoiceChat.ts` - `handleCancel()` now also aborts ongoing streams
+- In continuous mode, speaking while Claude is responding automatically interrupts
+
+**Feature 3: Visual Waveform Animation**
+- `src/components/Waveform.tsx` - New component with animated bars during processing/speaking
+- Shows purple during thinking, green during speaking/responding
+- Rendered in `VoiceChat.tsx` between the button and error area
+
+**Feature 4: Conversation Export**
+- `src/components/ConversationLog.tsx` - Added export dropdown with hover menu
+- Download as `.txt` (human-readable: "You: ... Claude: ...")
+- Download as `.json` (structured: messages array with metadata)
+- Timestamped filenames
+
+**Feature 5: Keyboard Shortcuts**
+- `src/hooks/useKeyboardShortcuts.ts` - New hook for global keyboard event handling
+- Space = push-to-talk (hold to record, release to send) in push-to-talk mode
+- Escape = cancel/stop in both modes
+- Shortcuts disabled when focus is in input/textarea/select elements
+- Keyboard hint text shown below header
+
+**Feature 6: VAD Energy Threshold Configuration**
+- `src/hooks/useVAD.ts` - Accepts `thresholds` option, exports `DEFAULT_VAD_THRESHOLDS`
+- `src/lib/types.ts` - Added `VADSettings` interface and `DEFAULT_VAD_SETTINGS`
+- `server/lib/settings-store.ts` - Added VAD settings to server-side persistence
+- `src/components/SettingsPanel.tsx` - Collapsible VAD section with range sliders:
+  - Speech detection sensitivity (positiveSpeechThreshold)
+  - End-of-speech sensitivity (negativeSpeechThreshold)
+  - Min speech duration (minSpeechMs)
+  - Silence tolerance / pause length (redemptionMs)
+  - Reset to defaults button
+
+**Verification:**
+- `npx tsc --noEmit` - 0 errors
 
 ### 2026-02-14 - Lint Fixes, Accessibility, Error Handling
 **Fixed:**
@@ -258,7 +325,7 @@ npm run dev
 
 ## Future Ideas
 
-1. **WebSocket streaming** - Improve latency
+1. **Streaming TTS** - Stream TTS audio chunks as Claude tokens arrive for even lower latency
 2. **Multi-language support** - Auto language detection
 3. **Voice cloning** - Custom voice
 4. **Electron app** - Native application

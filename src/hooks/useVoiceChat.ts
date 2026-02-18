@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
-import { transcribeAudio, streamMessage, textToSpeech, type Message, type StreamController } from '../lib/api'
+import { transcribeAudio, streamMessage, type Message, type StreamController } from '../lib/api'
 import { useAudioRecorder } from './useAudioRecorder'
+import { useStreamingTTS } from './useStreamingTTS'
 
 export type ChatState = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'speaking'
 
@@ -16,11 +17,18 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   const [error, setError] = useState<string | null>(null)
   const [currentTranscript, setCurrentTranscript] = useState<string>('')
   const [streamingResponse, setStreamingResponse] = useState<string>('')
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const audioUrlRef = useRef<string | null>(null)
   const streamControllerRef = useRef<StreamController | null>(null)
 
   const { startRecording, stopRecording, cancelRecording } = useAudioRecorder()
+
+  const tts = useStreamingTTS({
+    onPlaybackStart: () => setState('speaking'),
+    onPlaybackEnd: () => setState('idle'),
+    onError: (err) => {
+      setError(err.message)
+      setState('idle')
+    },
+  })
 
   // Sync messages from external source (e.g., loading a saved conversation)
   // setState during render is the React-recommended pattern for derived state
@@ -40,37 +48,6 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     },
     [onMessagesChange]
   )
-
-  const cleanupAudio = useCallback(() => {
-    if (audioUrlRef.current) {
-      URL.revokeObjectURL(audioUrlRef.current)
-      audioUrlRef.current = null
-    }
-  }, [])
-
-  const playAudio = useCallback(async (audioBlob: Blob) => {
-    cleanupAudio()
-
-    const url = URL.createObjectURL(audioBlob)
-    audioUrlRef.current = url
-
-    if (!audioRef.current) {
-      audioRef.current = new Audio()
-    }
-
-    audioRef.current.src = url
-    audioRef.current.onended = () => {
-      setState('idle')
-      cleanupAudio()
-    }
-    audioRef.current.onerror = () => {
-      setState('idle')
-      cleanupAudio()
-      setError('Failed to play audio')
-    }
-
-    await audioRef.current.play()
-  }, [cleanupAudio])
 
   const handleStartRecording = useCallback(async () => {
     setError(null)
@@ -112,8 +89,9 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         newMessages,
         (chunk) => {
           setStreamingResponse((prev) => prev + chunk)
+          tts.pushChunk(chunk)
         },
-        async (fullText) => {
+        (fullText) => {
           streamControllerRef.current = null
           setStreamingResponse('')
 
@@ -121,20 +99,13 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
           const assistantMessage: Message = { role: 'assistant', content: fullText }
           updateMessages([...newMessages, assistantMessage])
 
-          // Convert to speech
-          setState('speaking')
-          try {
-            const speechBlob = await textToSpeech(fullText)
-            await playAudio(speechBlob)
-          } catch (err) {
-            const message = err instanceof Error ? err.message : 'TTS failed'
-            setError(message)
-            setState('idle')
-          }
+          // Flush remaining text to TTS
+          tts.done()
         },
         (err) => {
           streamControllerRef.current = null
           setStreamingResponse('')
+          tts.abort()
           setError(err.message)
           setState('idle')
         },
@@ -146,7 +117,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       setError(message)
       setState('idle')
     }
-  }, [stopRecording, messages, playAudio, updateMessages])
+  }, [stopRecording, messages, updateMessages, tts])
 
   const handleCancel = useCallback(() => {
     cancelRecording()
@@ -157,15 +128,13 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
       streamControllerRef.current = null
     }
 
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-    }
-    cleanupAudio()
+    // Abort streaming TTS
+    tts.abort()
+
     setState('idle')
     setCurrentTranscript('')
     setStreamingResponse('')
-  }, [cancelRecording, cleanupAudio])
+  }, [cancelRecording, tts])
 
   const clearMessages = useCallback(() => {
     updateMessages([])

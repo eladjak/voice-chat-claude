@@ -136,3 +136,21 @@ export async function textToSpeech(text: string): Promise<Blob> {
 
   return response.blob()
 }
+
+export async function streamingTextToSpeech(text: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch('/api/speak/stream', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text }),
+    signal,
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Streaming TTS failed')
+  }
+
+  return response.blob()
+}

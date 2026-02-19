@@ -36,11 +36,15 @@ export function VoiceChat() {
     [saveMessages]
   )
 
+  // VAD thresholds from settings
+  const vadThresholds = settingsHook.settings.vad
+
   // Memoize options to avoid re-creating on every render
   const voiceChatOptions = useMemo(() => ({
     initialMessages: loadedMessages,
     onMessagesChange: handleMessagesChange,
-  }), [loadedMessages, handleMessagesChange])
+    vadThresholds,
+  }), [loadedMessages, handleMessagesChange, vadThresholds])
 
   // Push-to-talk mode
   const pushToTalk = useVoiceChat(voiceChatOptions)
@@ -101,6 +105,7 @@ export function VoiceChat() {
   useWakeWord({
     enabled: wakeWordEnabled ?? false,
     wakePhrases: wakeWordSettings?.phrases,
+    vadThresholds,
     onWakeWord: () => {
       continuous.startContinuousMode()
     },

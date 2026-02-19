@@ -14,10 +14,11 @@ export type ContinuousChatState =
 export interface UseContinuousVoiceChatOptions {
   initialMessages?: Message[]
   onMessagesChange?: (messages: Message[]) => void
+  vadThresholds?: Partial<import('./useVAD').VADThresholds>
 }
 
 export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = {}) {
-  const { initialMessages, onMessagesChange } = options
+  const { initialMessages, onMessagesChange, vadThresholds } = options
   const [state, setState] = useState<ContinuousChatState>('idle')
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? [])
   const [error, setError] = useState<string | null>(null)
@@ -156,6 +157,7 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
 
   const { isListening, isSpeaking, isLoading, error: vadError } = useVAD({
     enabled: isEnabled,
+    thresholds: vadThresholds,
     onSpeechStart: handleSpeechStart,
     onSpeechEnd: handleSpeechEnd,
     onVADMisfire: () => {

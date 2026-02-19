@@ -24,6 +24,8 @@ export interface UseWakeWordOptions {
   onWakeWord: (remainingText: string) => void
   /** Called when speech is detected but no wake word found */
   onSpeechWithoutWakeWord?: (text: string) => void
+  /** VAD threshold overrides from settings */
+  vadThresholds?: Partial<import('./useVAD').VADThresholds>
 }
 
 const DEFAULT_WAKE_PHRASES = [
@@ -44,6 +46,7 @@ export function useWakeWord(options: UseWakeWordOptions) {
     wakePhrases = DEFAULT_WAKE_PHRASES,
     onWakeWord,
     onSpeechWithoutWakeWord,
+    vadThresholds,
   } = options
 
   const [isListening, setIsListening] = useState(false)
@@ -98,6 +101,7 @@ export function useWakeWord(options: UseWakeWordOptions) {
 
   const { isLoading, error } = useVAD({
     enabled,
+    thresholds: vadThresholds,
     onSpeechEnd: handleSpeechEnd,
     onSpeechStart: () => {
       setIsListening(true)

@@ -1,7 +1,7 @@
 # Voice Chat Claude - Progress
 
-> **Last updated:** 2026-02-18
-> **Status:** Active - Streaming TTS (sentence-level), streaming responses, interruption, waveform, export, shortcuts, VAD config
+> **Last updated:** 2026-02-19
+> **Status:** Active - All core features complete (streaming TTS, wake word, VAD, interruption, export, shortcuts)
 
 ---
 
@@ -36,7 +36,7 @@
 
 | Feature | Priority | Complexity | Notes |
 |---------|----------|------------|-------|
-| Wake word integration in UI | Low | Low | Add toggle in settings, connect hook to continuous mode |
+| (none - all core features complete) | - | - | See Future Ideas below |
 
 ---
 
@@ -201,6 +201,31 @@ npm run dev
 
 ## Change Log
 
+### 2026-02-19 - Wake Word Integration Complete + Missing Module Fix
+
+**Fix 1: Missing `vite-plugin-static-copy` module**
+- Package was in `package.json` but not installed in `node_modules`
+- Ran `npm install` to restore it
+- Build now passes cleanly
+
+**Fix 2: VAD thresholds not wired to hooks**
+- Settings panel saved VAD thresholds to server but they were never passed to VAD instances
+- `useContinuousVoiceChat.ts` - Added `vadThresholds` option, passes to `useVAD`
+- `useWakeWord.ts` - Added `vadThresholds` option, passes to `useVAD`
+- `VoiceChat.tsx` - Passes `settingsHook.settings.vad` to both hooks
+
+**Fix 3: Streaming TTS server endpoint committed**
+- `server/lib/elevenlabs.ts` - `streamTextToSpeech` function + `resolveVoiceConfig` refactor
+
+**Wake word integration status: COMPLETE**
+- Settings UI: toggle + phrase management in SettingsPanel
+- Hook: `useWakeWord` with VAD + Whisper detection
+- VoiceChat: auto-starts continuous mode on wake phrase
+- Server: wake word settings persisted with defaults merge
+- VAD thresholds: now properly wired from settings to all VAD instances
+
+---
+
 ### 2026-02-18 - Streaming TTS (Sentence-Level Pipelining)
 
 **The big latency improvement:** Instead of waiting for Claude's full response then generating one big audio file, we now split streaming tokens into sentences and send each to ElevenLabs immediately. First audio plays ~1-2s after Claude starts generating.
@@ -359,7 +384,7 @@ npm run dev
 3. **Voice cloning** - Custom voice
 4. **Electron app** - Native application
 5. **Mobile PWA** - Mobile support
-6. **Wake word UI toggle** - Add to settings panel for hands-free activation
+6. ~~**Wake word UI toggle**~~ - DONE (2026-02-19)
 
 ---
 

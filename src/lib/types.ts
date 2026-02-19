@@ -21,6 +21,12 @@ export interface VADSettings {
   redemptionMs: number
 }
 
+/** Wake word settings */
+export interface WakeWordSettings {
+  enabled: boolean
+  phrases: string[]
+}
+
 /** Application settings persisted to server */
 export interface AppSettings {
   voiceId: string
@@ -28,6 +34,7 @@ export interface AppSettings {
   systemPrompt: string
   language: string
   vad: VADSettings
+  wakeWord: WakeWordSettings
 }
 
 /** Available configuration options from server */
@@ -51,6 +58,21 @@ export const DEFAULT_VAD_SETTINGS: VADSettings = {
   redemptionMs: 300,
 }
 
+/** Default wake word settings */
+export const DEFAULT_WAKE_WORD_SETTINGS: WakeWordSettings = {
+  enabled: false,
+  phrases: [
+    'hey claude',
+    'hi claude',
+    'ok claude',
+    'okay claude',
+    'היי קלוד',
+    'הי קלוד',
+    'שמע קלוד',
+    'קלוד',
+  ],
+}
+
 /** Default settings */
 export const DEFAULT_SETTINGS: AppSettings = {
   voiceId: 'EXAVITQu4vr4xnSDxMaL', // Sarah
@@ -59,6 +81,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     'You are a helpful voice assistant. Keep responses concise and conversational since they will be spoken aloud. Respond in the same language the user speaks.',
   language: 'he',
   vad: DEFAULT_VAD_SETTINGS,
+  wakeWord: DEFAULT_WAKE_WORD_SETTINGS,
 }
 
 /** Available models for selection */

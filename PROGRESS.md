@@ -1,7 +1,7 @@
 # Voice Chat Claude - Progress
 
 > **Last updated:** 2026-02-18
-> **Status:** Active - Streaming, interruption, waveform, export, keyboard shortcuts, VAD config
+> **Status:** Active - Streaming TTS (sentence-level), streaming responses, interruption, waveform, export, shortcuts, VAD config
 
 ---
 
@@ -14,7 +14,7 @@
 | **Server (Hono)** | Done | `server/index.ts` |
 | **STT - Whisper** | Done | `server/lib/whisper.ts` |
 | **LLM - Claude** | Done | `server/lib/claude.ts` |
-| **TTS - ElevenLabs** | Done | `server/lib/elevenlabs.ts` |
+| **TTS - ElevenLabs** | Done | `server/lib/elevenlabs.ts` (buffered + streaming) |
 | **Frontend React** | Done | `src/components/VoiceChat.tsx` |
 | **Push-to-Talk** | Done | `src/hooks/useVoiceChat.ts` |
 | **VAD (Voice Activity Detection)** | Done | `src/hooks/useVAD.ts` |
@@ -24,7 +24,8 @@
 | **Wake word detection** | Done | `src/hooks/useWakeWord.ts` |
 | **Env validation** | Done | `server/lib/env.ts` |
 | **Streaming responses** | Done | `src/lib/api.ts` (streamMessage with AbortController) |
-| **Interruption handling** | Done | Both voice chat hooks support abort + audio stop |
+| **Streaming TTS** | Done | `src/hooks/useStreamingTTS.ts` + `src/lib/sentenceSplitter.ts` + `src/lib/audioQueue.ts` |
+| **Interruption handling** | Done | All 3 layers abort atomically (Claude stream + TTS fetches + audio queue) |
 | **Waveform animation** | Done | `src/components/Waveform.tsx` |
 | **Conversation export** | Done | `src/components/ConversationLog.tsx` (text + JSON) |
 | **Keyboard shortcuts** | Done | `src/hooks/useKeyboardShortcuts.ts` |
@@ -35,7 +36,6 @@
 
 | Feature | Priority | Complexity | Notes |
 |---------|----------|------------|-------|
-| Streaming TTS | Low | High | Stream TTS audio chunks as Claude tokens arrive |
 | Wake word integration in UI | Low | Low | Add toggle in settings, connect hook to continuous mode |
 
 ---
@@ -56,7 +56,7 @@ voice-chat-claude/
 │   └── routes/
 │       ├── chat.ts           # POST /api/chat, /api/chat/stream
 │       ├── transcribe.ts     # POST /api/transcribe
-│       ├── speak.ts          # POST /api/speak
+│       ├── speak.ts          # POST /api/speak, POST /api/speak/stream
 │       ├── conversations.ts  # GET/POST/PUT/DELETE /api/conversations
 │       └── settings.ts       # GET/PUT /api/settings, GET /api/settings/voices
 ├── src/
@@ -69,8 +69,9 @@ voice-chat-claude/
 │   │   ├── SettingsPanel.tsx    # Settings sidebar panel (left) with VAD config
 │   │   └── Waveform.tsx         # Visual waveform animation component
 │   ├── hooks/
-│   │   ├── useVoiceChat.ts          # Push-to-talk logic (streaming + interruption)
-│   │   ├── useContinuousVoiceChat.ts # Continuous mode (streaming + interruption)
+│   │   ├── useVoiceChat.ts          # Push-to-talk logic (streaming + streaming TTS)
+│   │   ├── useContinuousVoiceChat.ts # Continuous mode (streaming + streaming TTS)
+│   │   ├── useStreamingTTS.ts       # Streaming TTS orchestrator hook
 │   │   ├── useVAD.ts                 # Voice Activity Detection (configurable thresholds)
 │   │   ├── useAudioRecorder.ts      # Manual recording
 │   │   ├── useChatHistory.ts        # Chat history persistence hook
@@ -78,7 +79,9 @@ voice-chat-claude/
 │   │   ├── useWakeWord.ts           # Wake word detection (VAD + Whisper)
 │   │   └── useKeyboardShortcuts.ts  # Keyboard shortcuts (Space, Escape)
 │   └── lib/
-│       ├── api.ts             # API calls (streamMessage with AbortController)
+│       ├── api.ts             # API calls (streamMessage, streamingTextToSpeech)
+│       ├── sentenceSplitter.ts # Accumulates tokens, emits complete sentences
+│       ├── audioQueue.ts       # Sequential audio blob playback queue
 │       ├── conversations.ts   # Conversations API client
 │       ├── settings-api.ts    # Settings API client
 │       └── types.ts           # Shared types, models, languages, VAD settings
@@ -110,9 +113,11 @@ Whisper STT
     |
 Claude API STREAMING (tokens arrive one by one) -> state: "thinking"
     |
-Stream complete -> ElevenLabs TTS -> state: "responding"
+SentenceSplitter accumulates tokens, emits sentences
     |
-Play audio + waveform animation + auto-save to JSON
+Each sentence -> /api/speak/stream -> AudioQueue -> state: "responding"
+    |
+Audio plays back-to-back (first sentence ~1-2s after Claude starts)
     |
 Back to VAD listening
 ```
@@ -123,15 +128,20 @@ Button press (or Space key) -> recording
     |
 Button release (or Space release) -> stop recording
     |
-Whisper -> Claude (streaming) -> ElevenLabs -> play + waveform + auto-save
+Whisper -> Claude (streaming) -> SentenceSplitter -> AudioQueue -> play + auto-save
 ```
 
 ### Interruption:
 ```
 During "thinking" or "responding":
-  - User speaks (continuous mode) -> aborts stream + stops audio
+  - User speaks (continuous mode) -> aborts all 3 layers atomically
   - Press Escape -> stops everything
   - Click mic button -> cancels current response
+
+All 3 layers cancelled together:
+  1. Claude SSE stream (AbortController)
+  2. In-flight TTS fetches (shared AbortController)
+  3. Audio queue (stops playback, clears queue)
 ```
 
 ### Keyboard Shortcuts:
@@ -190,6 +200,25 @@ npm run dev
 ---
 
 ## Change Log
+
+### 2026-02-18 - Streaming TTS (Sentence-Level Pipelining)
+
+**The big latency improvement:** Instead of waiting for Claude's full response then generating one big audio file, we now split streaming tokens into sentences and send each to ElevenLabs immediately. First audio plays ~1-2s after Claude starts generating.
+
+**New files:**
+- `src/lib/sentenceSplitter.ts` - Accumulates tokens, detects sentence boundaries (`.!?` + space/newline), handles abbreviations (`Mr.`, `Dr.`) and decimals (`3.14`), min 20-char threshold
+- `src/lib/audioQueue.ts` - Queues `Promise<Blob>` items, plays back-to-back using `Audio` elements, supports `abort()` for instant stop, revokes object URLs after each sentence
+- `src/hooks/useStreamingTTS.ts` - Orchestrator hook wiring splitter + queue + TTS fetches. Exposes `pushChunk`, `done`, `abort`, `isPlaying`
+- `server/routes/speak.ts` - Added `POST /api/speak/stream` endpoint using ElevenLabs streaming API
+- `src/lib/api.ts` - Added `streamingTextToSpeech()` with `AbortSignal` support
+
+**Modified hooks:**
+- `src/hooks/useVoiceChat.ts` - Replaced buffered TTS with `useStreamingTTS`. `onChunk` feeds splitter, `onDone` flushes, cancel aborts all layers
+- `src/hooks/useContinuousVoiceChat.ts` - Same pattern. Interruption now cancels 3 layers atomically: Claude stream + TTS fetches + audio queue
+
+**E2E verified:** Chat stream -> SentenceSplitter (2 sentences) -> /api/speak/stream (valid MP3) -> sequential playback. Error handling (400 on empty text) confirmed.
+
+---
 
 ### 2026-02-18 - Streaming, Interruption, Waveform, Export, Shortcuts, VAD Config
 
@@ -325,7 +354,7 @@ npm run dev
 
 ## Future Ideas
 
-1. **Streaming TTS** - Stream TTS audio chunks as Claude tokens arrive for even lower latency
+1. ~~**Streaming TTS**~~ - DONE (2026-02-18)
 2. **Multi-language support** - Auto language detection
 3. **Voice cloning** - Custom voice
 4. **Electron app** - Native application

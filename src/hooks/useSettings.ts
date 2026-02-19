@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { AppSettings, VoiceOption } from '../lib/types'
-import { DEFAULT_SETTINGS, DEFAULT_VAD_SETTINGS, AVAILABLE_MODELS, AVAILABLE_LANGUAGES } from '../lib/types'
+import { DEFAULT_SETTINGS, DEFAULT_VAD_SETTINGS, DEFAULT_WAKE_WORD_SETTINGS, AVAILABLE_MODELS, AVAILABLE_LANGUAGES } from '../lib/types'
 import { fetchSettings, updateSettings, fetchVoices } from '../lib/settings-api'
 
 export function useSettings() {
@@ -21,12 +21,13 @@ export function useSettings() {
           fetchSettings().catch(() => DEFAULT_SETTINGS),
           fetchVoices().catch(() => []),
         ])
-        // Ensure VAD settings have defaults for backward compatibility
-        const settingsWithVAD: AppSettings = {
+        // Ensure nested settings have defaults for backward compatibility
+        const settingsWithDefaults: AppSettings = {
           ...loadedSettings,
           vad: { ...DEFAULT_VAD_SETTINGS, ...(loadedSettings.vad || {}) },
+          wakeWord: { ...DEFAULT_WAKE_WORD_SETTINGS, ...(loadedSettings.wakeWord || {}) },
         }
-        setSettings(settingsWithVAD)
+        setSettings(settingsWithDefaults)
         setVoices(loadedVoices)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load settings'

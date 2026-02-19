@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { AppSettings, VoiceOption, ModelOption, LanguageOption } from '../lib/types'
-import { DEFAULT_VAD_SETTINGS } from '../lib/types'
+import { DEFAULT_VAD_SETTINGS, DEFAULT_WAKE_WORD_SETTINGS } from '../lib/types'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -30,6 +30,8 @@ export function SettingsPanel({
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [showVAD, setShowVAD] = useState(false)
+  const [showWakeWord, setShowWakeWord] = useState(false)
+  const [newPhrase, setNewPhrase] = useState('')
 
   // Sync local state when settings load/change externally
   useEffect(() => {
@@ -55,7 +57,9 @@ export function SettingsPanel({
     localSettings.vad.positiveSpeechThreshold !== (settings.vad?.positiveSpeechThreshold ?? DEFAULT_VAD_SETTINGS.positiveSpeechThreshold) ||
     localSettings.vad.negativeSpeechThreshold !== (settings.vad?.negativeSpeechThreshold ?? DEFAULT_VAD_SETTINGS.negativeSpeechThreshold) ||
     localSettings.vad.minSpeechMs !== (settings.vad?.minSpeechMs ?? DEFAULT_VAD_SETTINGS.minSpeechMs) ||
-    localSettings.vad.redemptionMs !== (settings.vad?.redemptionMs ?? DEFAULT_VAD_SETTINGS.redemptionMs)
+    localSettings.vad.redemptionMs !== (settings.vad?.redemptionMs ?? DEFAULT_VAD_SETTINGS.redemptionMs) ||
+    localSettings.wakeWord.enabled !== (settings.wakeWord?.enabled ?? DEFAULT_WAKE_WORD_SETTINGS.enabled) ||
+    JSON.stringify(localSettings.wakeWord.phrases) !== JSON.stringify(settings.wakeWord?.phrases ?? DEFAULT_WAKE_WORD_SETTINGS.phrases)
 
   const updateVAD = (key: keyof AppSettings['vad'], value: number) => {
     setLocalSettings({
@@ -213,6 +217,142 @@ export function SettingsPanel({
                   <p className="text-xs text-gray-400 mt-1">
                     This defines Claude's behavior and personality during voice conversations.
                   </p>
+                </div>
+
+                {/* Wake Word Settings (collapsible) */}
+                <div className="border border-gray-200 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setShowWakeWord(!showWakeWord)}
+                    className="w-full flex items-center justify-between p-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
+                  >
+                    <span className="flex items-center gap-2">
+                      Wake Word
+                      {localSettings.wakeWord.enabled && (
+                        <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
+                      )}
+                    </span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${showWakeWord ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showWakeWord && (
+                    <div className="p-3 pt-0 space-y-3">
+                      <p className="text-xs text-gray-400">
+                        Say a wake phrase to start a conversation hands-free. Works in continuous mode.
+                      </p>
+
+                      {/* Enable toggle */}
+                      <label htmlFor="wake-word-toggle" className="flex items-center justify-between cursor-pointer">
+                        <span className="text-xs text-gray-600">Enable wake word</span>
+                        <div className="relative">
+                          <input
+                            id="wake-word-toggle"
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={localSettings.wakeWord.enabled}
+                            onChange={(e) =>
+                              setLocalSettings({
+                                ...localSettings,
+                                wakeWord: { ...localSettings.wakeWord, enabled: e.target.checked },
+                              })
+                            }
+                          />
+                          <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-500 transition-colors" />
+                          <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+                        </div>
+                      </label>
+
+                      {/* Phrases list */}
+                      <div>
+                        <span className="text-xs text-gray-600 block mb-1">Wake phrases:</span>
+                        <div className="space-y-1">
+                          {localSettings.wakeWord.phrases.map((phrase, i) => (
+                            <div key={i} className="flex items-center gap-1 text-xs">
+                              <span className="flex-1 px-2 py-1 bg-gray-50 rounded border border-gray-100 text-gray-700" dir="auto">
+                                {phrase}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = localSettings.wakeWord.phrases.filter((_, idx) => idx !== i)
+                                  setLocalSettings({
+                                    ...localSettings,
+                                    wakeWord: { ...localSettings.wakeWord, phrases: updated },
+                                  })
+                                }}
+                                className="p-1 text-gray-400 hover:text-red-500"
+                                aria-label={`Remove phrase "${phrase}"`}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add new phrase */}
+                        <div className="flex items-center gap-1 mt-2">
+                          <input
+                            type="text"
+                            value={newPhrase}
+                            onChange={(e) => setNewPhrase(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newPhrase.trim()) {
+                                setLocalSettings({
+                                  ...localSettings,
+                                  wakeWord: {
+                                    ...localSettings.wakeWord,
+                                    phrases: [...localSettings.wakeWord.phrases, newPhrase.trim()],
+                                  },
+                                })
+                                setNewPhrase('')
+                              }
+                            }}
+                            placeholder="Add phrase..."
+                            className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            dir="auto"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newPhrase.trim()) {
+                                setLocalSettings({
+                                  ...localSettings,
+                                  wakeWord: {
+                                    ...localSettings.wakeWord,
+                                    phrases: [...localSettings.wakeWord.phrases, newPhrase.trim()],
+                                  },
+                                })
+                                setNewPhrase('')
+                              }
+                            }}
+                            className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Reset to defaults */}
+                      <button
+                        type="button"
+                        onClick={() => setLocalSettings({ ...localSettings, wakeWord: { ...DEFAULT_WAKE_WORD_SETTINGS } })}
+                        className="text-xs text-blue-500 hover:text-blue-700 underline"
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* VAD Settings (collapsible) */}

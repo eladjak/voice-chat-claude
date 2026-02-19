@@ -5,6 +5,7 @@ import { useContinuousVoiceChat } from '../hooks/useContinuousVoiceChat'
 import { useChatHistory } from '../hooks/useChatHistory'
 import { useSettings } from '../hooks/useSettings'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { useWakeWord } from '../hooks/useWakeWord'
 import { RecordButton } from './RecordButton'
 import { ContinuousButton } from './ContinuousButton'
 import { ConversationLog } from './ConversationLog'
@@ -94,6 +95,17 @@ export function VoiceChat() {
     setLoadedMessages(undefined)
   }, [clearMessages, chatHistory])
 
+  // Wake word detection: auto-start continuous mode when wake phrase is detected
+  const wakeWordSettings = settingsHook.settings.wakeWord
+  const wakeWordEnabled = wakeWordSettings?.enabled && mode === 'continuous' && !continuous.isEnabled
+  useWakeWord({
+    enabled: wakeWordEnabled ?? false,
+    wakePhrases: wakeWordSettings?.phrases,
+    onWakeWord: () => {
+      continuous.startContinuousMode()
+    },
+  })
+
   // Keyboard shortcuts: Space = push-to-talk, Escape = cancel/stop
   useKeyboardShortcuts({
     onSpaceDown: () => {
@@ -149,7 +161,11 @@ export function VoiceChat() {
           <h1 className="text-4xl font-bold text-gray-800 mb-2">Voice Chat with Claude</h1>
           <p className="text-gray-600">
             {mode === 'continuous'
-              ? 'Just speak - Claude is listening and will respond automatically'
+              ? continuous.isEnabled
+                ? 'Just speak - Claude is listening and will respond automatically'
+                : wakeWordEnabled
+                  ? 'Say "Hey Claude" to start a conversation'
+                  : 'Press the button to start a conversation'
               : 'Press the button and speak - Claude will listen and respond'}
           </p>
           <p className="text-xs text-gray-400 mt-1">

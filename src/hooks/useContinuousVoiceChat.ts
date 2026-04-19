@@ -94,7 +94,7 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
       const wavBlob = float32ToWavBlob(audio)
 
       // Transcribe
-      const transcript = await transcribeAudio(wavBlob)
+      const { text: transcript, language: detectedLang } = await transcribeAudio(wavBlob)
       setCurrentTranscript(transcript)
 
       if (!transcript.trim()) {
@@ -103,8 +103,12 @@ export function useContinuousVoiceChat(options: UseContinuousVoiceChatOptions = 
         return
       }
 
-      // Add user message
-      const userMessage: Message = { role: 'user', content: transcript }
+      // Add user message with detected language
+      const userMessage: Message = {
+        role: 'user',
+        content: transcript,
+        ...(detectedLang ? { language: detectedLang } : {}),
+      }
       const newMessages = [...messagesRef.current, userMessage]
       updateMessages(newMessages)
 

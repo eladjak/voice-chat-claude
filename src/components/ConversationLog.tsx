@@ -1,6 +1,34 @@
 import { useCallback } from 'react'
 import type { Message } from '../lib/api'
 
+/** Map Whisper language names to short display codes */
+const LANGUAGE_LABELS: Record<string, string> = {
+  hebrew: 'HE',
+  english: 'EN',
+  arabic: 'AR',
+  russian: 'RU',
+  french: 'FR',
+  spanish: 'ES',
+  german: 'DE',
+  italian: 'IT',
+  portuguese: 'PT',
+  japanese: 'JA',
+  chinese: 'ZH',
+  korean: 'KO',
+  // ISO codes (when language is set explicitly in settings)
+  he: 'HE',
+  en: 'EN',
+  ar: 'AR',
+  ru: 'RU',
+  fr: 'FR',
+  es: 'ES',
+  de: 'DE',
+}
+
+function getLanguageLabel(lang: string): string {
+  return LANGUAGE_LABELS[lang.toLowerCase()] ?? lang.slice(0, 2).toUpperCase()
+}
+
 interface ConversationLogProps {
   messages: Message[]
   currentTranscript: string
@@ -113,6 +141,17 @@ export function ConversationLog({ messages, currentTranscript, streamingResponse
               `}
             >
               <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+              {message.language && (
+                <span
+                  className={`inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                    message.role === 'user'
+                      ? 'bg-blue-400/50 text-blue-100'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {getLanguageLabel(message.language)}
+                </span>
+              )}
             </div>
           </div>
         ))}

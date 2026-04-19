@@ -67,7 +67,7 @@ export function useWakeWord(options: UseWakeWordOptions) {
     setIsProcessing(true)
     try {
       const wavBlob = float32ToWavBlob(audio)
-      const transcript = await transcribeAudio(wavBlob)
+      const { text: transcript } = await transcribeAudio(wavBlob)
       const text = transcript.trim().toLowerCase()
 
       if (!text) {

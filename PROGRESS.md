@@ -1,7 +1,7 @@
 # Voice Chat Claude - Progress
 
 > **Last updated:** 2026-02-19
-> **Status:** Active - All core features complete (streaming TTS, wake word, VAD, interruption, export, shortcuts)
+> **Status:** Active - Core + auto-detect language + PWA support
 
 ---
 
@@ -30,6 +30,8 @@
 | **Conversation export** | Done | `src/components/ConversationLog.tsx` (text + JSON) |
 | **Keyboard shortcuts** | Done | `src/hooks/useKeyboardShortcuts.ts` |
 | **VAD threshold config** | Done | `src/components/SettingsPanel.tsx` (collapsible VAD section) |
+| **Language auto-detect** | Done | Whisper `verbose_json` + language badge in chat |
+| **PWA support** | Done | `manifest.json` + meta tags + SVG icon |
 | **TypeScript** | Done | No errors |
 
 ### TODO:
@@ -200,6 +202,26 @@ npm run dev
 ---
 
 ## Change Log
+
+### 2026-02-19 - Language Auto-Detect + PWA Support
+
+**Feature 1: Multi-language auto-detection**
+- `server/lib/whisper.ts` - Returns `{ text, detectedLanguage }` using `verbose_json` format when language is set to "auto"
+- `server/routes/transcribe.ts` - Returns `language` field in JSON response
+- `src/lib/api.ts` - Updated `Message` type with optional `language` field, `transcribeAudio` returns `TranscriptionResult`
+- `src/hooks/useVoiceChat.ts` - Captures detected language, attaches to user messages
+- `src/hooks/useContinuousVoiceChat.ts` - Same pattern
+- `src/hooks/useWakeWord.ts` - Updated for new `transcribeAudio` return type
+- `src/components/ConversationLog.tsx` - Language badge (e.g., "HE", "EN") on user messages
+
+**Feature 2: PWA support (installable on mobile)**
+- `public/manifest.json` - Web app manifest (name, theme, icon)
+- `public/icon.svg` - App icon (microphone + sound waves on blue background)
+- `index.html` - PWA meta tags, manifest link, apple-mobile-web-app tags
+
+**Verification:** `npx tsc --noEmit` - 0 errors
+
+---
 
 ### 2026-02-19 - Wake Word Integration Complete + Missing Module Fix
 
@@ -380,10 +402,10 @@ npm run dev
 ## Future Ideas
 
 1. ~~**Streaming TTS**~~ - DONE (2026-02-18)
-2. **Multi-language support** - Auto language detection
+2. ~~**Multi-language support**~~ - DONE (2026-02-19) - Auto language detection + UI badge
 3. **Voice cloning** - Custom voice
 4. **Electron app** - Native application
-5. **Mobile PWA** - Mobile support
+5. ~~**Mobile PWA**~~ - DONE (2026-02-19) - Installable web app
 6. ~~**Wake word UI toggle**~~ - DONE (2026-02-19)
 
 ---

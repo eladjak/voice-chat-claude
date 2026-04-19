@@ -67,7 +67,7 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
 
       // Transcribe
       setState('transcribing')
-      const transcript = await transcribeAudio(audioBlob)
+      const { text: transcript, language: detectedLang } = await transcribeAudio(audioBlob)
       setCurrentTranscript(transcript)
 
       if (!transcript.trim()) {
@@ -76,8 +76,12 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         return
       }
 
-      // Add user message
-      const userMessage: Message = { role: 'user', content: transcript }
+      // Add user message with detected language
+      const userMessage: Message = {
+        role: 'user',
+        content: transcript,
+        ...(detectedLang ? { language: detectedLang } : {}),
+      }
       const newMessages = [...messages, userMessage]
       updateMessages(newMessages)
 

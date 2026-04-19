@@ -1,0 +1,51 @@
+{
+  "name": "voice-claude-code",
+  "version": "1.0.0",
+  "description": "Voice interface for Claude Code - speak and work with Claude from anywhere",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "npm run compile && concurrently -k \"npm run watch:main\" \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "compile": "tsc -p tsconfig.main.json",
+    "watch:main": "tsc -p tsconfig.main.json -w",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on tcp:5173 && electron .",
+    "build": "tsc -p tsconfig.main.json && vite build",
+    "start": "electron .",
+    "package": "npm run build && electron-builder"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.0",
+    "concurrently": "^9.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.5"
+  },
+  "dependencies": {
+    "@picovoice/porcupine-node": "^4.0.1",
+    "@picovoice/pvrecorder-node": "^1.2.8",
+    "dotenv": "^16.4.0",
+    "openai": "^4.70.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "build": {
+    "appId": "com.voice-claude-code",
+    "productName": "Voice Claude Code",
+    "files": [
+      "dist/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

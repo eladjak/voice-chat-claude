@@ -1,9 +1,15 @@
 export interface Message {
   role: 'user' | 'assistant'
   content: string
+  language?: string
 }
 
-export async function transcribeAudio(audioBlob: Blob): Promise<string> {
+export interface TranscriptionResult {
+  text: string
+  language: string | null
+}
+
+export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionResult> {
   const formData = new FormData()
   // Use appropriate filename extension based on MIME type
   const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
@@ -20,7 +26,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   const data = await response.json()
-  return data.text
+  return { text: data.text, language: data.language ?? null }
 }
 
 export async function sendMessage(messages: Message[]): Promise<string> {

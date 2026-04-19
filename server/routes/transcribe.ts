@@ -12,8 +12,11 @@ transcribeRoute.post('/', async (c) => {
       return c.json({ error: 'No audio file provided' }, 400)
     }
 
-    const text = await transcribeAudio(audioFile)
-    return c.json({ text })
+    const result = await transcribeAudio(audioFile)
+    return c.json({
+      text: result.text,
+      language: result.detectedLanguage,
+    })
   } catch (error) {
     console.error('Transcription error:', error)
     return c.json(
